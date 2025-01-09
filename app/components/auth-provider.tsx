@@ -27,7 +27,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = async (username: string, password: string) => {
     // En una aplicación real, aquí se haría una llamada a la API para autenticar
-    if (username === 'admin' && password === 'password') {
+    if (username === 'mama' && password === '2013') {
       const user = { username, role: 'admin' as const }
       setUser(user)
       localStorage.setItem('user', JSON.stringify(user))
