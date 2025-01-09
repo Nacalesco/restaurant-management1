@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/app/components/ui/ca
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { db } from '@/lib/db'
 import Layout from '../components/layout'
+import * as XLSX from 'xlsx';
 
 export default function InformesPage() {
   const [fechaInicio, setFechaInicio] = useState('')
@@ -21,9 +22,24 @@ export default function InformesPage() {
   }
 
   const exportarExcel = () => {
-    // Aquí iría la lógica para exportar a Excel
-    alert('Función de exportar a Excel no implementada')
-  }
+    if (reporte) {
+      // Crear una hoja de cálculo
+      const ws = XLSX.utils.json_to_sheet([
+        { "Total de Ventas": reporte.totalVentas },
+        { "Plato": "Cantidad" },
+        ...reporte.platosMasVendidos.map(([nombre, cantidad]) => ({ "Plato": nombre, "Cantidad": cantidad }))
+      ]);
+
+      // Crear un libro de trabajo y añadir la hoja
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Reporte de Ventas");
+
+      // Guardar el archivo
+      XLSX.writeFile(wb, `Reporte_Ventas_${fechaInicio}_a_${fechaFin}.xlsx`);
+    } else {
+      alert('Por favor, genera un reporte primero.');
+    }
+  };
 
   return (
     <Layout>
