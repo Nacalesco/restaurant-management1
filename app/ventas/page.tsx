@@ -5,35 +5,65 @@ import { Button } from "@/app/components/ui/button"
 import { Input } from "@/app/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/app/components/ui/table"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/app/components/ui/select"
-import { db, Venta, Plato } from '@/lib/db'
 import { format } from 'date-fns'
 import Layout from '../components/layout'
 
+interface Sale {
+  id: number;
+  product_name: string;
+  quantity: number;
+  total_price: number;
+  date: string;
+}
+
+interface Product {
+  id: number;
+  name: string;
+  price: number;
+  stock: number;
+}
+
 export default function VentasPage() {
-  const [ventas, setVentas] = useState<Venta[]>([])
-  const [nuevaVenta, setNuevaVenta] = useState<Omit<Venta, 'id'>>({ fecha: '', plato: '', cantidad: 0, total: 0 })
+  const [ventas, setVentas] = useState<Sale[]>([])
+  const [nuevaVenta, setNuevaVenta] = useState({ productId: '', quantity: '', totalPrice: '' })
   const [fecha, setFecha] = useState(format(new Date(), 'yyyy-MM-dd'))
-  const [platos, setPlatos] = useState<Plato[]>([])
+  const [productos, setProductos] = useState<Product[]>([])
 
   useEffect(() => {
-    setPlatos(db.platos)
-    cargarVentas()
-  }, [fecha])
+    fetchVentas()
+    fetchProductos()
+  }, [])
 
-  const cargarVentas = () => {
-    const ventasDia = db.obtenerVentasPorFecha(fecha)
-    setVentas(ventasDia)
+  const fetchVentas = async () => {
+    const response = await fetch('/api/sales')
+    const data = await response.json()
+    setVentas(data)
   }
 
-  const registrarVenta = () => {
-    if (nuevaVenta.plato && nuevaVenta.cantidad) {
-      const plato = platos.find(p => p.nombre === nuevaVenta.plato)
-      if (plato) {
-        const total = plato.precio * nuevaVenta.cantidad
-        const ventaCompleta = { ...nuevaVenta, fecha, total }
-        db.registrarVenta(ventaCompleta)
-        cargarVentas()
-        setNuevaVenta({ fecha: '', plato: '', cantidad: 0, total: 0 })
+  const fetchProductos = async () => {
+    const response = await fetch('/api/sales', { method: 'PUT' })
+    const data = await response.json()
+    setProductos(data)
+  }
+
+  const registrarVenta = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (nuevaVenta.productId && nuevaVenta.quantity) {
+      const producto = productos.find(p => p.id === parseInt(nuevaVenta.productId))
+      if (producto) {
+        const totalPrice = producto.price * parseInt(nuevaVenta.quantity)
+        await fetch('/api/sales', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            productId: parseInt(nuevaVenta.productId),
+            quantity: parseInt(nuevaVenta.quantity),
+            totalPrice,
+            date: fecha
+          })
+        })
+        fetchVentas()
+        setNuevaVenta({ productId: '', quantity: '', totalPrice: '' })
       }
     }
   }
@@ -50,42 +80,41 @@ export default function VentasPage() {
             className="mb-2"
           />
         </div>
-        <div className="mb-4 flex gap-2">
-          <Select
-            value={nuevaVenta.plato}
-            onValueChange={(value) => setNuevaVenta({ ...nuevaVenta, plato: value })}
-          >
+        <form onSubmit={registrarVenta} className="mb-4 flex gap-2">
+          <Select value={nuevaVenta.productId} onValueChange={(value) => setNuevaVenta({ ...nuevaVenta, productId: value })}>
             <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="Plato" />
+              <SelectValue placeholder="Producto" />
             </SelectTrigger>
             <SelectContent>
-              {platos.map((plato) => (
-                <SelectItem key={plato.id} value={plato.nombre}>{plato.nombre}</SelectItem>
+              {productos.map((producto) => (
+                <SelectItem key={producto.id} value={producto.id.toString()}>{producto.name}</SelectItem>
               ))}
             </SelectContent>
           </Select>
           <Input
             placeholder="Cantidad"
             type="number"
-            value={nuevaVenta.cantidad || ''}
-            onChange={(e) => setNuevaVenta({ ...nuevaVenta, cantidad: parseInt(e.target.value) })}
+            value={nuevaVenta.quantity}
+            onChange={(e) => setNuevaVenta({ ...nuevaVenta, quantity: e.target.value })}
           />
-          <Button onClick={registrarVenta}>Registrar Venta</Button>
-        </div>
+          <Button type="submit">Registrar Venta</Button>
+        </form>
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Plato</TableHead>
+              <TableHead>Producto</TableHead>
               <TableHead>Cantidad</TableHead>
               <TableHead>Total</TableHead>
+              <TableHead>Fecha</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {ventas.map((venta) => (
               <TableRow key={venta.id}>
-                <TableCell>{venta.plato}</TableCell>
-                <TableCell>{venta.cantidad}</TableCell>
-                <TableCell>${venta.total}</TableCell>
+                <TableCell>{venta.product_name}</TableCell>
+                <TableCell>{venta.quantity}</TableCell>
+                <TableCell>${venta.total_price.toFixed(2)}</TableCell>
+                <TableCell>{venta.date}</TableCell>
               </TableRow>
             ))}
           </TableBody>

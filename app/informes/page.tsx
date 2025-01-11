@@ -5,41 +5,43 @@ import { Button } from "@/app/components/ui/button"
 import { Input } from "@/app/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/app/components/ui/card"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
-import { db } from '@/lib/db'
 import Layout from '../components/layout'
-import * as XLSX from 'xlsx';
+
+interface ReportData {
+  totalSales: { total: number };
+  topProducts: { name: string; total_quantity: number }[];
+}
 
 export default function InformesPage() {
   const [fechaInicio, setFechaInicio] = useState('')
   const [fechaFin, setFechaFin] = useState('')
-  const [reporte, setReporte] = useState<{ totalVentas: number, platosMasVendidos: [string, number][] } | null>(null)
+  const [reporte, setReporte] = useState<ReportData | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
-  const generarReporte = () => {
+  const generarReporte = async () => {
     if (fechaInicio && fechaFin) {
-      const resultado = db.obtenerReporteVentas(fechaInicio, fechaFin)
-      setReporte(resultado)
+      try {
+        const response = await fetch(`/api/reports?fechaInicio=${fechaInicio}&fechaFin=${fechaFin}`)
+        if (!response.ok) {
+          throw new Error('Error al obtener los datos del reporte')
+        }
+        const data = await response.json()
+        setReporte(data)
+        setError(null)
+      } catch (err) {
+        console.error('Error al generar el reporte:', err)
+        setError('Hubo un error al generar el reporte. Por favor, inténtelo de nuevo.')
+        setReporte(null)
+      }
+    } else {
+      setError('Por favor, seleccione las fechas de inicio y fin.')
     }
   }
 
   const exportarExcel = () => {
-    if (reporte) {
-      // Crear una hoja de cálculo
-      const ws = XLSX.utils.json_to_sheet([
-        { "Total de Ventas": reporte.totalVentas },
-        { "Plato": "Cantidad" },
-        ...reporte.platosMasVendidos.map(([nombre, cantidad]) => ({ "Plato": nombre, "Cantidad": cantidad }))
-      ]);
-
-      // Crear un libro de trabajo y añadir la hoja
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Reporte de Ventas");
-
-      // Guardar el archivo
-      XLSX.writeFile(wb, `Reporte_Ventas_${fechaInicio}_a_${fechaFin}.xlsx`);
-    } else {
-      alert('Por favor, genera un reporte primero.');
-    }
-  };
+    // Aquí iría la lógica para exportar a Excel
+    alert('Función de exportar a Excel no implementada')
+  }
 
   return (
     <Layout>
@@ -61,6 +63,11 @@ export default function InformesPage() {
           <Button onClick={generarReporte}>Generar Reporte</Button>
           <Button onClick={exportarExcel}>Exportar a Excel</Button>
         </div>
+        {error && (
+          <div className="mb-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded">
+            {error}
+          </div>
+        )}
         {reporte && (
           <>
             <Card className="mb-4">
@@ -68,24 +75,28 @@ export default function InformesPage() {
                 <CardTitle>Total de Ventas</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-2xl font-bold">${reporte.totalVentas}</p>
+                <p className="text-2xl font-bold">${reporte.totalSales.total.toFixed(2)}</p>
               </CardContent>
             </Card>
             <Card>
               <CardHeader>
-                <CardTitle>Platos Más Vendidos</CardTitle>
+                <CardTitle>Productos Más Vendidos</CardTitle>
               </CardHeader>
               <CardContent>
-                <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={reporte.platosMasVendidos.map(([nombre, cantidad]) => ({ nombre, cantidad }))}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="nombre" />
-                    <YAxis />
-                    <Tooltip />
-                    <Legend />
-                    <Bar dataKey="cantidad" fill="#8884d8" />
-                  </BarChart>
-                </ResponsiveContainer>
+                {reporte.topProducts.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart data={reporte.topProducts}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="name" />
+                      <YAxis />
+                      <Tooltip />
+                      <Legend />
+                      <Bar dataKey="total_quantity" fill="#8884d8" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <p>No hay datos de ventas para el período seleccionado.</p>
+                )}
               </CardContent>
             </Card>
           </>
