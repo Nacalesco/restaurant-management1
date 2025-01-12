@@ -1,6 +1,7 @@
 import { Database } from 'sqlite3'
 import { open } from 'sqlite'
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 let db: any = null;
 
 async function openDb() {

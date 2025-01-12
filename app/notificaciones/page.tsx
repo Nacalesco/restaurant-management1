@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react'
 import { Card, CardHeader, CardTitle, CardContent } from "@/app/components/ui/card"
 import Layout from '../components/layout'
 import { useAuth } from '../components/auth-provider'
-import { db } from '@/lib/db'
 
 interface Notificacion {
   id: number;
@@ -17,14 +16,12 @@ export default function NotificacionesPage() {
   const { user } = useAuth()
 
   useEffect(() => {
-    // Aquí normalmente cargaríamos las notificaciones desde la base de datos
-    const productosConBajoStock = db.productos.filter(p => p.cantidad < 10)
-    const nuevasNotificaciones = productosConBajoStock.map(p => ({
-      id: Number(p.id),
-      mensaje: `Stock bajo para ${p.nombre}: ${p.cantidad} ${p.unidad}`,
-      tipo: 'warning' as const
-    }))
-    setNotificaciones(nuevasNotificaciones)
+    const fetchNotifications = async () => {
+      const response = await fetch('/api/notifications')
+      const data = await response.json()
+      setNotificaciones(data)
+    }
+    fetchNotifications()
   }, [])
 
   if (!user) {
