@@ -9,32 +9,20 @@ import Layout from '../components/layout'
 
 interface ReportData {
   totalSales: { total: number };
-  topProducts: { name: string; total_quantity: number }[];
+  topDishes: { name: string; total_quantity: number }[];
+  rawMaterialsUsed: { name: string; unit: string; total_used: number }[];
 }
 
 export default function InformesPage() {
   const [fechaInicio, setFechaInicio] = useState('')
   const [fechaFin, setFechaFin] = useState('')
   const [reporte, setReporte] = useState<ReportData | null>(null)
-  const [error, setError] = useState<string | null>(null)
 
   const generarReporte = async () => {
     if (fechaInicio && fechaFin) {
-      try {
-        const response = await fetch(`/api/reports?fechaInicio=${fechaInicio}&fechaFin=${fechaFin}`)
-        if (!response.ok) {
-          throw new Error('Error al obtener los datos del reporte')
-        }
-        const data = await response.json()
-        setReporte(data)
-        setError(null)
-      } catch (err) {
-        console.error('Error al generar el reporte:', err)
-        setError('Hubo un error al generar el reporte. Por favor, inténtelo de nuevo.')
-        setReporte(null)
-      }
-    } else {
-      setError('Por favor, seleccione las fechas de inicio y fin.')
+      const response = await fetch(`/api/reports?startDate=${fechaInicio}&endDate=${fechaFin}`)
+      const data = await response.json()
+      setReporte(data)
     }
   }
 
@@ -63,11 +51,6 @@ export default function InformesPage() {
           <Button onClick={generarReporte}>Generar Reporte</Button>
           <Button onClick={exportarExcel}>Exportar a Excel</Button>
         </div>
-        {error && (
-          <div className="mb-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded">
-            {error}
-          </div>
-        )}
         {reporte && (
           <>
             <Card className="mb-4">
@@ -78,25 +61,38 @@ export default function InformesPage() {
                 <p className="text-2xl font-bold">${reporte.totalSales.total.toFixed(2)}</p>
               </CardContent>
             </Card>
-            <Card>
+            <Card className="mb-4">
               <CardHeader>
-                <CardTitle>Productos Más Vendidos</CardTitle>
+                <CardTitle>Platos Más Vendidos</CardTitle>
               </CardHeader>
               <CardContent>
-                {reporte.topProducts.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={300}>
-                    <BarChart data={reporte.topProducts}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="name" />
-                      <YAxis />
-                      <Tooltip />
-                      <Legend />
-                      <Bar dataKey="total_quantity" fill="#8884d8" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <p>No hay datos de ventas para el período seleccionado.</p>
-                )}
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={reporte.topDishes}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" />
+                    <YAxis />
+                    <Tooltip />
+                    <Legend />
+                    <Bar dataKey="total_quantity" fill="#8884d8" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>Materia Prima Utilizada</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={reporte.rawMaterialsUsed}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" />
+                    <YAxis />
+                    <Tooltip />
+                    <Legend />
+                    <Bar dataKey="total_used" fill="#82ca9d" />
+                  </BarChart>
+                </ResponsiveContainer>
               </CardContent>
             </Card>
           </>

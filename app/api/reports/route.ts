@@ -3,14 +3,19 @@ import { getStatistics } from '@/lib/db-server'
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
-  const fechaInicio = searchParams.get('fechaInicio')
-  const fechaFin = searchParams.get('fechaFin')
+  const startDate = searchParams.get('startDate')
+  const endDate = searchParams.get('endDate')
 
-  if (!fechaInicio || !fechaFin) {
-    return NextResponse.json({ error: 'Fechas de inicio y fin son requeridas' }, { status: 400 })
+  if (!startDate || !endDate) {
+    return NextResponse.json({ error: 'Start date and end date are required' }, { status: 400 })
   }
 
-  const statistics = await getStatistics(fechaInicio, fechaFin)
-  return NextResponse.json(statistics)
+  try {
+    const statistics = await getStatistics(startDate, endDate)
+    return NextResponse.json(statistics)
+  } catch (error) {
+    console.error('Error generating report:', error)
+    return NextResponse.json({ error: 'An error occurred while generating the report' }, { status: 500 })
+  }
 }
 
