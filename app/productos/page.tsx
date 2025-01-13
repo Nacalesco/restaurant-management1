@@ -4,332 +4,307 @@ import { useState, useEffect } from 'react'
 import { Button } from "@/app/components/ui/button"
 import { Input } from "@/app/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/app/components/ui/table"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/app/components/ui/tabs"
-import { Card, CardContent, CardHeader, CardTitle } from "@/app/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/app/components/ui/select"
 import Layout from '../components/layout'
+import Link from 'next/link'
 
-interface RawMaterial {
+interface Ingredient {
   id: number;
   name: string;
-  price: number;
-  stock: number;
+  quantity: number;
   unit: string;
-  min_stock: number;
 }
 
 interface Dish {
   id: number;
   name: string;
   price: number;
-  category: string;
+  ingredients: Ingredient[];
 }
 
-interface DishIngredient {
+interface RawMaterial {
   id: number;
-  raw_material_id: number;
-  raw_material_name: string;
+  name: string;
   quantity: number;
   unit: string;
 }
 
-export default function ProductosPage() {
+export default function PlatosPage() {
+  const [platos, setPlatos] = useState<Dish[]>([])
   const [rawMaterials, setRawMaterials] = useState<RawMaterial[]>([])
-  const [dishes, setDishes] = useState<Dish[]>([])
-  const [newRawMaterial, setNewRawMaterial] = useState<Omit<RawMaterial, 'id'>>({ name: '', price: 0, stock: 0, unit: '', min_stock: 0 })
-  const [newDish, setNewDish] = useState<Omit<Dish, 'id'>>({ name: '', price: 0, category: '' })
-  const [editingRawMaterialId, setEditingRawMaterialId] = useState<number | null>(null)
-  const [editingDishId, setEditingDishId] = useState<number | null>(null)
-  const [selectedDishId, setSelectedDishId] = useState<number | null>(null)
-  const [dishIngredients, setDishIngredients] = useState<DishIngredient[]>([])
-  const [newIngredient, setNewIngredient] = useState<{ raw_material_id: number, quantity: number }>({ raw_material_id: 0, quantity: 0 })
+  const [nuevoPlato, setNuevoPlato] = useState({ name: '', price: '', ingredients: [] as {id: number, quantity: number, unit: string}[] })
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    fetchPlatos()
     fetchRawMaterials()
-    fetchDishes()
   }, [])
 
+  const fetchPlatos = async () => {
+    try {
+      const response = await fetch('/api/dishes')
+      if (!response.ok) {
+        throw new Error('Error fetching dishes')
+      }
+      const data = await response.json()
+      setPlatos(data)
+    } catch (err) {
+      console.error('Error fetching dishes:', err)
+      setError('Error al cargar los platos. Por favor, intente de nuevo.')
+    }
+  }
+
   const fetchRawMaterials = async () => {
-    const response = await fetch('/api/inventory?action=getRawMaterials')
-    const data = await response.json()
-    setRawMaterials(data)
-  }
-
-  const fetchDishes = async () => {
-    const response = await fetch('/api/inventory?action=getDishes')
-    const data = await response.json()
-    setDishes(data)
-  }
-
-  const fetchDishIngredients = async (dishId: number) => {
-    const response = await fetch(`/api/inventory?action=getDishIngredients&dishId=${dishId}`)
-    const data = await response.json()
-    setDishIngredients(data)
-  }
-
-  const handleRawMaterialSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (editingRawMaterialId) {
-      await fetch('/api/inventory', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'updateRawMaterial', id: editingRawMaterialId, ...newRawMaterial })
-      })
-    } else {
-      await fetch('/api/inventory', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'addRawMaterial', ...newRawMaterial })
-      })
+    try {
+      const response = await fetch('/api/inventory')
+      if (!response.ok) {
+        throw new Error('Error fetching raw materials')
+      }
+      const data = await response.json()
+      setRawMaterials(data)
+    } catch (err) {
+      console.error('Error fetching raw materials:', err)
+      setError('Error al cargar las materias primas. Por favor, intente de nuevo.')
     }
-    setNewRawMaterial({ name: '', price: 0, stock: 0, unit: '', min_stock: 0 })
-    setEditingRawMaterialId(null)
-    fetchRawMaterials()
   }
 
-  const handleDishSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (editingDishId) {
-      await fetch('/api/inventory', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'updateDish', id: editingDishId, ...newDish })
-      })
+    if (editingId) {
+      await updatePlato()
     } else {
-      await fetch('/api/inventory', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'addDish', ...newDish })
-      })
+      await addPlato()
     }
-    setNewDish({ name: '', price: 0, category: '' })
-    setEditingDishId(null)
-    fetchDishes()
   }
 
-  const handleDeleteRawMaterial = async (id: number) => {
-    await fetch('/api/inventory', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'deleteRawMaterial', id })
-    })
-    fetchRawMaterials()
-  }
-
-  const handleDeleteDish = async (id: number) => {
-    await fetch('/api/inventory', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'deleteDish', id })
-    })
-    fetchDishes()
-  }
-
-  const handleAddIngredient = async () => {
-    if (selectedDishId && newIngredient.raw_material_id && newIngredient.quantity) {
-      await fetch('/api/inventory', {
+  const addPlato = async () => {
+    try {
+      const response = await fetch('/api/dishes', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({
-          action: 'addDishIngredient',
-          dishId: selectedDishId,
-          ...newIngredient
-        })
+          name: nuevoPlato.name,
+          price: parseFloat(nuevoPlato.price),
+          ingredients: nuevoPlato.ingredients
+        }),
       })
-      fetchDishIngredients(selectedDishId)
-      setNewIngredient({ raw_material_id: 0, quantity: 0 })
+
+      if (!response.ok) {
+        throw new Error('Error adding dish')
+      }
+
+      await fetchPlatos()
+      setNuevoPlato({ name: '', price: '', ingredients: [] })
+      setError(null)
+    } catch (err) {
+      console.error('Error adding dish:', err)
+      setError('Error al agregar el plato. Por favor, intente de nuevo.')
     }
   }
 
-  const handleDeleteIngredient = async (id: number) => {
-    if (selectedDishId) {
-      await fetch('/api/inventory', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'deleteDishIngredient', id })
+  const updatePlato = async () => {
+    try {
+      const response = await fetch('/api/dishes', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          id: editingId,
+          name: nuevoPlato.name,
+          price: parseFloat(nuevoPlato.price),
+          ingredients: nuevoPlato.ingredients
+        }),
       })
-      fetchDishIngredients(selectedDishId)
+
+      if (!response.ok) {
+        throw new Error('Error updating dish')
+      }
+
+      await fetchPlatos()
+      setNuevoPlato({ name: '', price: '', ingredients: [] })
+      setEditingId(null)
+      setError(null)
+    } catch (err) {
+      console.error('Error updating dish:', err)
+      setError('Error al actualizar el plato. Por favor, intente de nuevo.')
     }
+  }
+
+  const handleDelete = async (id: number) => {
+    try {
+      const response = await fetch('/api/dishes', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ id }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Error deleting dish')
+      }
+
+      await fetchPlatos()
+    } catch (err) {
+      console.error('Error deleting dish:', err)
+      setError('Error al eliminar el plato. Por favor, intente de nuevo.')
+    }
+  }
+
+  const handleEdit = (plato: Dish) => {
+    setNuevoPlato({ 
+      name: plato.name, 
+      price: plato.price.toString(), 
+      ingredients: plato.ingredients?.map(ing => ({
+        id: ing.id || 0,
+        quantity: ing.quantity || 0,
+        unit: ing.unit || ''
+      })) || []
+    })
+    setEditingId(plato.id)
+  }
+
+  const handleIngredientChange = (index: number, field: 'id' | 'quantity' | 'unit', value: string) => {
+    const newIngredients = [...nuevoPlato.ingredients]
+    if (newIngredients[index]) {
+      if (field === 'id') {
+        newIngredients[index] = { ...newIngredients[index], id: parseInt(value) || 0 }
+      } else if (field === 'quantity') {
+        newIngredients[index] = { ...newIngredients[index], quantity: parseFloat(value) || 0 }
+      } else {
+        newIngredients[index] = { ...newIngredients[index], unit: value }
+      }
+      setNuevoPlato({ ...nuevoPlato, ingredients: newIngredients })
+    }
+  }
+
+  const addIngredient = () => {
+    setNuevoPlato({
+      ...nuevoPlato,
+      ingredients: [...nuevoPlato.ingredients, { id: 0, quantity: 0, unit: 'g' }]
+    })
+  }
+
+  const removeIngredient = (index: number) => {
+    const newIngredients = nuevoPlato.ingredients.filter((_, i) => i !== index)
+    setNuevoPlato({ ...nuevoPlato, ingredients: newIngredients })
   }
 
   return (
     <Layout>
       <div className="container mx-auto p-4">
-        <h1 className="text-3xl font-bold mb-6">Gestión de Productos</h1>
-        <Tabs defaultValue="raw-materials">
-          <TabsList>
-            <TabsTrigger value="raw-materials">Materias Primas</TabsTrigger>
-            <TabsTrigger value="dishes">Platos</TabsTrigger>
-          </TabsList>
-          <TabsContent value="raw-materials">
-            <Card>
-              <CardHeader>
-                <CardTitle>Materias Primas</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <form onSubmit={handleRawMaterialSubmit} className="mb-4 grid grid-cols-6 gap-4">
-                  <Input
-                    placeholder="Nombre"
-                    value={newRawMaterial.name}
-                    onChange={(e) => setNewRawMaterial({ ...newRawMaterial, name: e.target.value })}
-                    className="col-span-2"
-                  />
-                  <Input
-                    type="number"
-                    placeholder="Precio"
-                    value={newRawMaterial.price}
-                    onChange={(e) => setNewRawMaterial({ ...newRawMaterial, price: parseFloat(e.target.value) })}
-                  />
-                  <Input
-                    type="number"
-                    placeholder="Stock"
-                    value={newRawMaterial.stock}
-                    onChange={(e) => setNewRawMaterial({ ...newRawMaterial, stock: parseInt(e.target.value) })}
-                  />
-                  <Input
-                    placeholder="Unidad"
-                    value={newRawMaterial.unit}
-                    onChange={(e) => setNewRawMaterial({ ...newRawMaterial, unit: e.target.value })}
-                  />
-                  <Button type="submit">{editingRawMaterialId ? 'Actualizar' : 'Agregar'}</Button>
-                </form>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Nombre</TableHead>
-                      <TableHead>Precio</TableHead>
-                      <TableHead>Stock</TableHead>
-                      <TableHead>Unidad</TableHead>
-                      <TableHead>Acciones</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {rawMaterials.map((material) => (
-                      <TableRow key={material.id}>
-                        <TableCell>{material.name}</TableCell>
-                        <TableCell>${material.price.toFixed(2)}</TableCell>
-                        <TableCell>{material.stock}</TableCell>
-                        <TableCell>{material.unit}</TableCell>
-                        <TableCell>
-                          <Button onClick={() => setEditingRawMaterialId(material.id)} className="mr-2">Editar</Button>
-                          <Button onClick={() => handleDeleteRawMaterial(material.id)} variant="destructive">Eliminar</Button>
-                        </TableCell>
-                      </TableRow>
+        <div className="flex justify-between items-center mb-6">
+          <h1 className="text-3xl font-bold">Gestión de Platos</h1>
+          <Link href="/">
+            <Button>Volver al Menú Principal</Button>
+          </Link>
+        </div>
+        {error && (
+          <div className="mb-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded">
+            {error}
+          </div>
+        )}
+        <form onSubmit={handleSubmit} className="mb-4">
+          <div className="flex gap-2 mb-2">
+            <Input
+              placeholder="Nombre del plato"
+              value={nuevoPlato.name}
+              onChange={(e) => setNuevoPlato({ ...nuevoPlato, name: e.target.value })}
+              required
+            />
+            <Input
+              placeholder="Precio"
+              type="number"
+              step="0.01"
+              value={nuevoPlato.price}
+              onChange={(e) => setNuevoPlato({ ...nuevoPlato, price: e.target.value })}
+              required
+            />
+          </div>
+          <div className="mb-2">
+            <h3 className="text-lg font-semibold mb-2">Ingredientes</h3>
+            {nuevoPlato.ingredients.map((ing, index) => (
+              <div key={index} className="flex gap-2 mb-2">
+                <Select 
+                  value={ing.id.toString()} 
+                  onValueChange={(value) => handleIngredientChange(index, 'id', value)}
+                >
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="Seleccionar ingrediente" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {rawMaterials.map((rm) => (
+                      <SelectItem key={rm.id} value={rm.id.toString()}>{rm.name}</SelectItem>
                     ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-          </TabsContent>
-          <TabsContent value="dishes">
-            <Card>
-              <CardHeader>
-                <CardTitle>Platos</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <form onSubmit={handleDishSubmit} className="mb-4 grid grid-cols-4 gap-4">
-                  <Input
-                    placeholder="Nombre"
-                    value={newDish.name}
-                    onChange={(e) => setNewDish({ ...newDish, name: e.target.value })}
-                  />
-                  <Input
-                    type="number"
-                    placeholder="Precio"
-                    value={newDish.price}
-                    onChange={(e) => setNewDish({ ...newDish, price: parseFloat(e.target.value) })}
-                  />
-                  <Input
-                    placeholder="Categoría"
-                    value={newDish.category}
-                    onChange={(e) => setNewDish({ ...newDish, category: e.target.value })}
-                  />
-                  <Button type="submit">{editingDishId ? 'Actualizar' : 'Agregar'}</Button>
-                </form>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Nombre</TableHead>
-                      <TableHead>Precio</TableHead>
-                      <TableHead>Categoría</TableHead>
-                      <TableHead>Acciones</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {dishes.map((dish) => (
-                      <TableRow key={dish.id}>
-                        <TableCell>{dish.name}</TableCell>
-                        <TableCell>${dish.price.toFixed(2)}</TableCell>
-                        <TableCell>{dish.category}</TableCell>
-                        <TableCell>
-                          <Button onClick={() => setEditingDishId(dish.id)} className="mr-2">Editar</Button>
-                          <Button onClick={() => handleDeleteDish(dish.id)} variant="destructive" className="mr-2">Eliminar</Button>
-                          <Button onClick={() => {
-                            setSelectedDishId(dish.id)
-                            fetchDishIngredients(dish.id)
-                          }}>Ver Ingredientes</Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-            {selectedDishId && (
-              <Card className="mt-4">
-                <CardHeader>
-                  <CardTitle>Ingredientes del Plato</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="mb-4 grid grid-cols-3 gap-4">
-                    <Select
-                      value={newIngredient.raw_material_id.toString()}
-                      onValueChange={(value) => setNewIngredient({ ...newIngredient, raw_material_id: parseInt(value) })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Seleccionar ingrediente" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {rawMaterials.map((material) => (
-                          <SelectItem key={material.id} value={material.id.toString()}>{material.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Input
-                      type="number"
-                      placeholder="Cantidad"
-                      value={newIngredient.quantity}
-                      onChange={(e) => setNewIngredient({ ...newIngredient, quantity: parseFloat(e.target.value) })}
-                    />
-                    <Button onClick={handleAddIngredient}>Agregar Ingrediente</Button>
-                  </div>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Ingrediente</TableHead>
-                        <TableHead>Cantidad</TableHead>
-                        <TableHead>Unidad</TableHead>
-                        <TableHead>Acciones</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {dishIngredients.map((ingredient) => (
-                        <TableRow key={ingredient.id}>
-                          <TableCell>{ingredient.raw_material_name}</TableCell>
-                          <TableCell>{ingredient.quantity}</TableCell>
-                          <TableCell>{ingredient.unit}</TableCell>
-                          <TableCell>
-                            <Button onClick={() => handleDeleteIngredient(ingredient.id)} variant="destructive">Eliminar</Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
-            )}
-          </TabsContent>
-        </Tabs>
+                  </SelectContent>
+                </Select>
+                <Input
+                  placeholder="Cantidad"
+                  type="number"
+                  step="0.01"
+                  value={ing.quantity}
+                  onChange={(e) => handleIngredientChange(index, 'quantity', e.target.value)}
+                  required
+                />
+                <Select 
+                  value={ing.unit} 
+                  onValueChange={(value) => handleIngredientChange(index, 'unit', value)}
+                >
+                  <SelectTrigger className="w-[100px]">
+                    <SelectValue placeholder="Unidad" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="g">Gramos</SelectItem>
+                    <SelectItem value="kg">Kilogramos</SelectItem>
+                    <SelectItem value="ml">Mililitros</SelectItem>
+                    <SelectItem value="l">Litros</SelectItem>
+                    <SelectItem value="unidad">Unidades</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button type="button" onClick={() => removeIngredient(index)} variant="destructive">
+                  Eliminar
+                </Button>
+              </div>
+            ))}
+            <Button type="button" onClick={addIngredient} className="mt-2">
+              Agregar Ingrediente
+            </Button>
+          </div>
+          <Button type="submit">{editingId ? 'Actualizar' : 'Agregar'} Plato</Button>
+        </form>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Nombre</TableHead>
+              <TableHead>Precio</TableHead>
+              <TableHead>Ingredientes</TableHead>
+              <TableHead>Acciones</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {platos.map((plato) => (
+              <TableRow key={plato.id}>
+                <TableCell>{plato.name}</TableCell>
+                <TableCell>${plato.price.toFixed(2)}</TableCell>
+                <TableCell>
+                  <ul>
+                    {plato.ingredients?.map((ing, index) => (
+                      <li key={index}>{ing.name || 'Unknown'}: {ing.quantity || 0} {ing.unit || ''}</li>
+                    )) || 'No ingredients'}
+                  </ul>
+                </TableCell>
+                <TableCell>
+                  <Button onClick={() => handleEdit(plato)} className="mr-2">Editar</Button>
+                  <Button onClick={() => handleDelete(plato.id)} variant="destructive">Eliminar</Button>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       </div>
     </Layout>
   )
