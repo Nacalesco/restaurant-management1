@@ -6,7 +6,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen flex flex-col">
       <header className="bg-primary text-primary-foreground p-4">
         <div className="container mx-auto flex justify-between items-center">
-          <h1 className="text-2xl font-bold">Sistema de Gestión de Restaurante</h1>
+          <h1 className="text-2xl font-bold">Sistema de Gestión Fiore</h1>
           <Link href="/">
             <Button variant="secondary">Volver al Menú Principal</Button>
           </Link>
@@ -16,7 +16,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         {children}
       </main>
       <footer className="bg-muted p-4 text-center">
-        <p>&copy; 2023 Tu Restaurante. Todos los derechos reservados.</p>
+        <p>&copy; 2025 Fiore. Todos los derechos reservados.</p>
       </footer>
     </div>
   )

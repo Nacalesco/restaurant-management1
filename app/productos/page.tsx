@@ -6,7 +6,6 @@ import { Input } from "@/app/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/app/components/ui/table"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/app/components/ui/select"
 import Layout from '../components/layout'
-import Link from 'next/link'
 
 interface Ingredient {
   id: number;
@@ -199,9 +198,7 @@ export default function PlatosPage() {
       <div className="container mx-auto p-4">
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-3xl font-bold">Gestión de Platos</h1>
-          <Link href="/">
-            <Button>Volver al Menú Principal</Button>
-          </Link>
+          
         </div>
         {error && (
           <div className="mb-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded">

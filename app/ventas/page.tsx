@@ -32,6 +32,7 @@ export default function VentasPage() {
   useEffect(() => {
     cargarVentas()
     cargarPlatos()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fecha])
 
   const cargarVentas = async () => {

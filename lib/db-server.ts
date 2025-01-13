@@ -62,6 +62,11 @@ export async function addRawMaterial(name: string, quantity: number, unit: strin
   }
 }
 
+export async function getLowStockProducts(threshold: number = 10) {
+  const db = await openDb();
+  return db.all('SELECT * FROM raw_materials WHERE quantity < ?', [threshold]);
+}
+
 export async function updateRawMaterial(id: number, name: string, quantity: number, unit: string) {
   const db = await openDb();
   return db.run('UPDATE raw_materials SET name = ?, quantity = ?, unit = ? WHERE id = ?', [name, quantity, unit, id]);
