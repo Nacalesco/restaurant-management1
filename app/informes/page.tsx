@@ -29,7 +29,6 @@ export default function InformesPage() {
           throw new Error('Error al generar el reporte')
         }
         const data = await response.json()
-        // Asegurarse de que todos los arrays existan
         setReporte({
           totalSales: data.totalSales || { total: 0 },
           topDishes: data.topDishes || [],
@@ -135,43 +134,116 @@ export default function InformesPage() {
             )}
 
             {reporte.rawMaterialsUsed && reporte.rawMaterialsUsed.length > 0 && (
-              <Card className="mb-4">
-                <CardHeader>
-                  <CardTitle>Materia Prima Utilizada</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="mb-4">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Ingrediente</TableHead>
-                          <TableHead>Unidad</TableHead>
-                          <TableHead>Cantidad Utilizada</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {reporte.rawMaterialsUsed.map((material, index) => (
-                          <TableRow key={index}>
-                            <TableCell>{material.name}</TableCell>
-                            <TableCell>{material.unit}</TableCell>
-                            <TableCell>{material.total_used}</TableCell>
+              <>
+                <Card className="mb-4">
+                  <CardHeader>
+                    <CardTitle>Resumen de Materia Prima Utilizada</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="mb-4">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Ingrediente</TableHead>
+                            <TableHead>Unidad</TableHead>
+                            <TableHead className="text-right">Cantidad Utilizada</TableHead>
                           </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <BarChart data={reporte.rawMaterialsUsed}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="name" />
-                      <YAxis />
-                      <Tooltip />
-                      <Legend />
-                      <Bar dataKey="total_used" fill="#82ca9d" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
+                        </TableHeader>
+                        <TableBody>
+                          {reporte.rawMaterialsUsed.map((material, index) => (
+                            <TableRow key={index}>
+                              <TableCell className="font-medium">{material.name}</TableCell>
+                              <TableCell>{material.unit}</TableCell>
+                              <TableCell className="text-right">
+                                {material.total_used.toFixed(2)}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                    <ResponsiveContainer width="100%" height={300}>
+                      <BarChart data={reporte.rawMaterialsUsed}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="name" />
+                        <YAxis />
+                        <Tooltip />
+                        <Legend />
+                        <Bar dataKey="total_used" fill="#82ca9d" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Detalle de Consumo de Ingredientes</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <h3 className="text-lg font-semibold mb-2">Top 5 Ingredientes más Utilizados</h3>
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Posición</TableHead>
+                              <TableHead>Ingrediente</TableHead>
+                              <TableHead>Cantidad</TableHead>
+                              <TableHead>% del Total</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {reporte.rawMaterialsUsed
+                              .sort((a, b) => b.total_used - a.total_used)
+                              .slice(0, 5)
+                              .map((material, index) => {
+                                const totalUsage = reporte.rawMaterialsUsed.reduce((acc, curr) => acc + curr.total_used, 0);
+                                const percentage = (material.total_used / totalUsage) * 100;
+                                return (
+                                  <TableRow key={index}>
+                                    <TableCell>{index + 1}</TableCell>
+                                    <TableCell className="font-medium">{material.name}</TableCell>
+                                    <TableCell>{`${material.total_used.toFixed(2)} ${material.unit}`}</TableCell>
+                                    <TableCell>{`${percentage.toFixed(1)}%`}</TableCell>
+                                  </TableRow>
+                                );
+                              })}
+                          </TableBody>
+                        </Table>
+                      </div>
+
+                      <div>
+                        <h3 className="text-lg font-semibold mb-2">Ingredientes con Menor Uso</h3>
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Ingrediente</TableHead>
+                              <TableHead>Cantidad</TableHead>
+                              <TableHead>% del Total</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {reporte.rawMaterialsUsed
+                              .sort((a, b) => a.total_used - b.total_used)
+                              .slice(0, 5)
+                              .map((material, index) => {
+                                const totalUsage = reporte.rawMaterialsUsed.reduce((acc, curr) => acc + curr.total_used, 0);
+                                const percentage = (material.total_used / totalUsage) * 100;
+                                return (
+                                  <TableRow key={index}>
+                                    <TableCell className="font-medium">{material.name}</TableCell>
+                                    <TableCell>{`${material.total_used.toFixed(2)} ${material.unit}`}</TableCell>
+                                    <TableCell>{`${percentage.toFixed(1)}%`}</TableCell>
+                                  </TableRow>
+                                );
+                              })}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </>
             )}
           </>
         )}

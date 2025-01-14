@@ -45,7 +45,54 @@ async function openDb() {
   }
   return db;
 }
+export async function getStatistics(fechaInicio: string, fechaFin: string) {
+  const db = await openDb();
+  
+  // Get total sales
+  const totalSales = await db.get(
+    'SELECT COALESCE(SUM(total_price), 0) as total FROM sales WHERE date BETWEEN ? AND ?', 
+    [fechaInicio, fechaFin]
+  );
 
+  // Get top dishes
+  const topDishes = await db.all(`
+    SELECT dishes.name, SUM(sales.quantity) as total_quantity
+    FROM sales
+    JOIN dishes ON sales.dish_id = dishes.id
+    WHERE sales.date BETWEEN ? AND ?
+    GROUP BY dishes.id
+    ORDER BY total_quantity DESC
+    LIMIT 5
+  `, [fechaInicio, fechaFin]);
+
+  // Get raw materials usage
+  const rawMaterialsUsed = await db.all(`
+    WITH sales_ingredients AS (
+      SELECT 
+        raw_material_id,
+        di.quantity as ingredient_quantity,
+        di.unit,
+        s.quantity as sales_quantity
+      FROM sales s
+      JOIN dish_ingredients di ON s.dish_id = di.dish_id
+      WHERE s.date BETWEEN ? AND ?
+    )
+    SELECT 
+      rm.name,
+      rm.unit,
+      ROUND(SUM(si.ingredient_quantity * si.sales_quantity), 2) as total_used
+    FROM sales_ingredients si
+    JOIN raw_materials rm ON si.raw_material_id = rm.id
+    GROUP BY rm.id
+    ORDER BY total_used DESC
+  `, [fechaInicio, fechaFin]);
+
+  return { 
+    totalSales: { total: totalSales.total || 0 }, 
+    topDishes,
+    rawMaterialsUsed
+  };
+}
 // Raw Materials (Inventory) Functions
 export async function getRawMaterials() {
   const db = await openDb();
@@ -167,7 +214,7 @@ export async function getSales() {
   `);
 }
 
-export async function getStatistics(fechaInicio: string, fechaFin: string) {
+/*export async function getStatistics(fechaInicio: string, fechaFin: string) {
   const db = await openDb();
   const totalSales = await db.get('SELECT COALESCE(SUM(total_price), 0) as total FROM sales WHERE date BETWEEN ? AND ?', [fechaInicio, fechaFin]);
   const topDishes = await db.all(`
@@ -180,5 +227,5 @@ export async function getStatistics(fechaInicio: string, fechaFin: string) {
     LIMIT 5
   `, [fechaInicio, fechaFin]);
   return { totalSales: { total: totalSales.total || 0 }, topDishes };
-}
+}*/
 

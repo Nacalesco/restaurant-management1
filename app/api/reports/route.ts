@@ -11,11 +11,10 @@ export async function GET(request: Request) {
   }
 
   try {
-    const statistics = await getStatistics(startDate, endDate)
-    return NextResponse.json(statistics)
+    const stats = await getStatistics(startDate, endDate)
+    return NextResponse.json(stats)
   } catch (error) {
     console.error('Error generating report:', error)
-    return NextResponse.json({ error: 'An error occurred while generating the report' }, { status: 500 })
+    return NextResponse.json({ error: 'Error generating report' }, { status: 500 })
   }
 }
-
