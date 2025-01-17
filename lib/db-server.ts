@@ -1,7 +1,26 @@
 import sqlite3 from 'sqlite3'
 import { open, Database } from 'sqlite'
+import moment from 'moment-timezone';
 
 let db: Database | null = null;
+
+function utcToZonedTime(date: Date, timeZone: string): Date {
+  return moment.tz(date, timeZone).toDate();
+}
+
+function zonedTimeToUtc(date: Date, timeZone: string): Date {
+  return moment.tz(date, timeZone).utc().toDate();
+}
+
+// Ejemplo de uso:
+const now = new Date();
+const timeZone = 'America/Argentina/Buenos_Aires'; // Ajusta esto a tu zona horaria
+
+const zonedDate = utcToZonedTime(now, timeZone);
+console.log('Fecha en zona horaria local:', zonedDate);
+
+const utcDate = zonedTimeToUtc(zonedDate, timeZone);
+console.log('Fecha en UTC:', utcDate);
 
 async function openDb() {
   if (!db) {
@@ -188,30 +207,69 @@ export async function deleteDish(id: number) {
 }
 
 // Sales Functions
+export async function getSales(date: string) {
+  const db = await openDb();
+  const startOfDay = zonedTimeToUtc(new Date(`${date}T00:00:00`), 'America/Argentina/Buenos_Aires').toISOString();
+  const endOfDay = zonedTimeToUtc(new Date(`${date}T23:59:59`), 'America/Argentina/Buenos_Aires').toISOString();
+
+  const sales = await db.all(`
+    SELECT sales.*, dishes.name as dish_name 
+    FROM sales 
+    JOIN dishes ON sales.dish_id = dishes.id
+    WHERE sales.date BETWEEN ? AND ?
+    ORDER BY sales.date DESC, sales.id DESC
+  `, [startOfDay, endOfDay]);
+
+  return sales.map(sale => ({
+    ...sale,
+    date: utcToZonedTime(sale.date, 'America/Argentina/Buenos_Aires').toISOString(),
+  }));
+}
+
 export async function addSale(dishId: number, quantity: number, totalPrice: number, date: string) {
+  const db = await openDb();
+  const dateUtc = zonedTimeToUtc(new Date(date), 'America/Argentina/Buenos_Aires').toISOString();
+
+  await db.run('INSERT INTO sales (dish_id, quantity, total_price, date) VALUES (?, ?, ?, ?)', [
+    dishId,
+    quantity,
+    totalPrice,
+    dateUtc,
+  ]);
+}
+
+export async function deleteSale(id: number) {
   const db = await openDb();
   await db.run('BEGIN TRANSACTION');
   try {
-    await db.run('INSERT INTO sales (dish_id, quantity, total_price, date) VALUES (?, ?, ?, ?)', [dishId, quantity, totalPrice, date]);
-    const ingredients = await db.all('SELECT raw_material_id, quantity, unit FROM dish_ingredients WHERE dish_id = ?', [dishId]);
-    for (const ingredient of ingredients) {
-      await db.run('UPDATE raw_materials SET quantity = quantity - ? WHERE id = ?', 
-        [ingredient.quantity * quantity, ingredient.raw_material_id]);
+    // Primero, obtenemos la información de la venta
+    const sale = await db.get('SELECT dish_id, quantity FROM sales WHERE id = ?', [id]);
+    
+    if (!sale) {
+      throw new Error('Venta no encontrada');
     }
+
+    // Obtenemos los ingredientes del plato
+    const ingredients = await db.all(
+      'SELECT raw_material_id, quantity FROM dish_ingredients WHERE dish_id = ?', 
+      [sale.dish_id]
+    );
+
+    // Devolvemos los ingredientes al inventario
+    for (const ingredient of ingredients) {
+      await db.run(
+        'UPDATE raw_materials SET quantity = quantity + ? WHERE id = ?', 
+        [ingredient.quantity * sale.quantity, ingredient.raw_material_id]
+      );
+    }
+
+    // Eliminamos la venta
+    await db.run('DELETE FROM sales WHERE id = ?', [id]);
     await db.run('COMMIT');
   } catch (error) {
     await db.run('ROLLBACK');
     throw error;
   }
-}
-
-export async function getSales() {
-  const db = await openDb();
-  return db.all(`
-    SELECT sales.*, dishes.name as dish_name 
-    FROM sales 
-    JOIN dishes ON sales.dish_id = dishes.id
-  `);
 }
 
 /*export async function getStatistics(fechaInicio: string, fechaFin: string) {
@@ -228,4 +286,3 @@ export async function getSales() {
   `, [fechaInicio, fechaFin]);
   return { totalSales: { total: totalSales.total || 0 }, topDishes };
 }*/
-
