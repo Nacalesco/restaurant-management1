@@ -88,9 +88,27 @@ export default function InventarioPage() {
     setEditingId(item.id)
   }
 
-  function handleDelete(id: number): void {
-    setInventario(prevInventario => prevInventario.filter(item => item.id !== id))
-  }
+  const handleDelete = async (id: number) => {
+    try {
+      const response = await fetch(`/api/inventory`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ id }),
+      });
+      if (!response.ok) {
+        throw new Error('Error deleting raw material');
+      }
+      setInventario(prevInventario => prevInventario.filter(item => item.id !== id));
+    } catch (err) {
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError('An unknown error occurred.');
+      }
+    }
+  };
 
   // JSX principal
   return (
