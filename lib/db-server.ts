@@ -209,33 +209,105 @@ export async function deleteDish(id: number) {
 // Sales Functions
 export async function getSales(date: string) {
   const db = await openDb();
-  const startOfDay = zonedTimeToUtc(new Date(`${date}T00:00:00`), 'America/Argentina/Buenos_Aires').toISOString();
-  const endOfDay = zonedTimeToUtc(new Date(`${date}T23:59:59`), 'America/Argentina/Buenos_Aires').toISOString();
+  const searchDate = new Date(date);
+  const startOfDay = new Date(searchDate);
+  startOfDay.setHours(0, 0, 0, 0);
+  
+  const endOfDay = new Date(searchDate);
+  endOfDay.setHours(23, 59, 59, 999);
 
   const sales = await db.all(`
     SELECT sales.*, dishes.name as dish_name 
     FROM sales 
     JOIN dishes ON sales.dish_id = dishes.id
-    WHERE sales.date BETWEEN ? AND ?
+    WHERE datetime(sales.date) BETWEEN datetime(?) AND datetime(?)
     ORDER BY sales.date DESC, sales.id DESC
-  `, [startOfDay, endOfDay]);
+  `, [startOfDay.toISOString(), endOfDay.toISOString()]);
 
-  return sales.map(sale => ({
-    ...sale,
-    date: utcToZonedTime(sale.date, 'America/Argentina/Buenos_Aires').toISOString(),
-  }));
+  return sales;
 }
 
 export async function addSale(dishId: number, quantity: number, totalPrice: number, date: string) {
   const db = await openDb();
-  const dateUtc = zonedTimeToUtc(new Date(date), 'America/Argentina/Buenos_Aires').toISOString();
+  const saleDate = new Date(date).toISOString();
 
-  await db.run('INSERT INTO sales (dish_id, quantity, total_price, date) VALUES (?, ?, ?, ?)', [
-    dishId,
-    quantity,
-    totalPrice,
-    dateUtc,
-  ]);
+  await db.run('BEGIN TRANSACTION');
+  
+  try {
+    // 1. Obtener los ingredientes del plato
+    const ingredients = await db.all(`
+      SELECT 
+        di.raw_material_id,
+        di.quantity as required_quantity,
+        di.unit,
+        rm.quantity as current_stock,
+        rm.name
+      FROM dish_ingredients di
+      JOIN raw_materials rm ON di.raw_material_id = rm.id
+      WHERE di.dish_id = ?
+    `, [dishId]);
+
+    // 2. Verificar si hay suficiente stock
+    for (const ingredient of ingredients) {
+      const totalRequired = ingredient.required_quantity * quantity;
+      if (ingredient.current_stock < totalRequired) {
+        throw new Error(`Stock insuficiente de ${ingredient.name}. Necesita: ${totalRequired} ${ingredient.unit}, Disponible: ${ingredient.current_stock} ${ingredient.unit}`);
+      }
+    }
+
+    // 3. Actualizar el stock de cada ingrediente
+    for (const ingredient of ingredients) {
+      const totalUsed = ingredient.required_quantity * quantity;
+      await db.run(`
+        UPDATE raw_materials 
+        SET quantity = quantity - ? 
+        WHERE id = ?
+      `, [totalUsed, ingredient.raw_material_id]);
+    }
+
+    // 4. Registrar la venta
+    await db.run(`
+      INSERT INTO sales (dish_id, quantity, total_price, date) 
+      VALUES (?, ?, ?, ?)
+    `, [dishId, quantity, totalPrice, saleDate]);
+
+    await db.run('COMMIT');
+  } catch (error) {
+    await db.run('ROLLBACK');
+    throw error;
+  }
+}
+
+// Función para verificar el stock bajo
+export async function checkLowStock(dishId: number, quantity: number) {
+  const db = await openDb();
+  
+  const ingredients = await db.all(`
+    SELECT 
+      rm.id,
+      rm.name,
+      rm.quantity as current_stock,
+      rm.unit,
+      di.quantity as required_quantity
+    FROM dish_ingredients di
+    JOIN raw_materials rm ON di.raw_material_id = rm.id
+    WHERE di.dish_id = ?
+  `, [dishId]);
+
+  const lowStockIngredients = ingredients.filter(ingredient => {
+    const totalRequired = ingredient.required_quantity * quantity;
+    return ingredient.current_stock < totalRequired;
+  });
+
+  return {
+    hasEnoughStock: lowStockIngredients.length === 0,
+    lowStockIngredients: lowStockIngredients.map(ing => ({
+      name: ing.name,
+      required: ing.required_quantity * quantity,
+      available: ing.current_stock,
+      unit: ing.unit
+    }))
+  };
 }
 
 export async function deleteSale(id: number) {

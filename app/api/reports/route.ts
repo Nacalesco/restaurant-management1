@@ -7,14 +7,20 @@ export async function GET(request: Request) {
   const endDate = searchParams.get('endDate')
 
   if (!startDate || !endDate) {
-    return NextResponse.json({ error: 'Start date and end date are required' }, { status: 400 })
+    return NextResponse.json(
+      { error: 'Las fechas de inicio y fin son requeridas' }, 
+      { status: 400 }
+    )
   }
 
   try {
     const stats = await getStatistics(startDate, endDate)
     return NextResponse.json(stats)
   } catch (error) {
-    console.error('Error generating report:', error)
-    return NextResponse.json({ error: 'Error generating report' }, { status: 500 })
+    console.error('Error al generar el reporte:', error)
+    return NextResponse.json(
+      { error: 'Error al generar el reporte' }, 
+      { status: 500 }
+    )
   }
 }
