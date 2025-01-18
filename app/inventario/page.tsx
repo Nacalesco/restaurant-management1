@@ -6,8 +6,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/app/components/ui/select"
 import { Alert, AlertDescription } from "@/app/components/ui/alert"
 import { Card, CardContent, CardHeader, CardTitle } from "@/app/components/ui/card"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/app/components/ui/dialog"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
-import { Search, AlertTriangle, Package, PackagePlus, Loader2 } from 'lucide-react'
+import { Search, AlertTriangle, Package, PackagePlus, Loader2, Plus,FileDown } from 'lucide-react'
 import Layout from '../components/layout'
 
 interface RawMaterial {
@@ -16,6 +17,7 @@ interface RawMaterial {
   quantity: number;
   unit: string;
 }
+
 
 export default function InventarioPage() {
   const [inventario, setInventario] = useState<RawMaterial[]>([])
@@ -26,6 +28,10 @@ export default function InventarioPage() {
   const [loading, setLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [lowStockItems, setLowStockItems] = useState<RawMaterial[]>([])
+  const [isBulkUpdateOpen, setIsBulkUpdateOpen] = useState(false)
+  const [bulkUpdates, setBulkUpdates] = useState<{[key: number]: string}>({})
+  const [selectedUnit, setSelectedUnit] = useState<string>('all')
+  const [stockFilter, setStockFilter] = useState<string>('all')
 
   useEffect(() => {
     fetchInventario()
@@ -40,34 +46,84 @@ export default function InventarioPage() {
       }
       const data = await response.json()
       setInventario(data)
-      // Identificar items con bajo stock (menos de 10 unidades)
       setLowStockItems(data.filter((item: RawMaterial) => item.quantity < 10))
       setError(null)
-    } catch (err) {
-      console.error('Error fetching inventory:', err)
+    } catch (error) {
+      console.error('Error fetching inventory:', error)
       setError('Error al cargar el inventario. Por favor, intente de nuevo.')
     } finally {
       setLoading(false)
     }
   }
 
-  const filteredInventory = inventario.filter(item =>
-    item.name.toLowerCase().includes(searchTerm.toLowerCase())
-  )
+  const handleBulkUpdate = async () => {
+    setIsSubmitting(true)
+    try {
+      const updates = Object.entries(bulkUpdates)
+        .filter(([, quantity]) => quantity !== '')
+        .map(([id, quantity]) => ({
+          id: parseInt(id),
+          quantity: parseFloat(quantity)
+        }))
 
-  const getInventoryTrend = () => {
-    return inventario.map(item => ({
-      name: item.name,
-      cantidad: item.quantity
-    })).slice(0, 5) // Mostrar solo los primeros 5 items para el gráfico
+      const updatePromises = updates.map(({ id, quantity }) => {
+        const item = inventario.find(i => i.id === id)
+        if (!item) return null
+
+        return fetch('/api/inventory', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id,
+            name: item.name,
+            quantity: item.quantity + quantity,
+            unit: item.unit
+          })
+        })
+      })
+
+      await Promise.all(updatePromises.filter(Boolean))
+      await fetchInventario()
+      setBulkUpdates({})
+      setIsBulkUpdateOpen(false)
+      setError(null)
+    } catch {
+      setError('Error al actualizar el inventario')
+    } finally {
+      setIsSubmitting(false)
+    }
   }
+
+  const handleExportLowStock = () => {
+    const csvContent = "data:text/csv;charset=utf-8," + 
+      "Nombre,Cantidad,Unidad\n" +
+      lowStockItems.map(item => `${item.name},${item.quantity},${item.unit}`).join("\n")
+    
+    const encodedUri = encodeURI(csvContent)
+    const link = document.createElement("a")
+    link.setAttribute("href", encodedUri)
+    link.setAttribute("download", "stock_bajo.csv")
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
+  const filteredInventory = inventario.filter(item => {
+    const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesUnit = selectedUnit === 'all' || item.unit === selectedUnit
+    const matchesStock = stockFilter === 'all' || 
+      (stockFilter === 'low' && item.quantity < 10) ||
+      (stockFilter === 'medium' && item.quantity >= 10 && item.quantity < 20) ||
+      (stockFilter === 'high' && item.quantity >= 20)
+    
+    return matchesSearch && matchesUnit && matchesStock
+  })
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setIsSubmitting(true)
     try {
       if (editingId !== null) {
-        // Edit existing item
         const response = await fetch('/api/inventory', {
           method: 'PUT',
           headers: {
@@ -85,7 +141,6 @@ export default function InventarioPage() {
           throw new Error('Error updating item')
         }
       } else {
-        // Add new item
         const response = await fetch('/api/inventory', {
           method: 'POST',
           headers: {
@@ -103,7 +158,6 @@ export default function InventarioPage() {
         }
       }
       
-      // Refresh the inventory after successful operation
       await fetchInventario()
       setEditingId(null)
       setNuevoItem({ name: '', quantity: '', unit: '' })
@@ -119,16 +173,9 @@ export default function InventarioPage() {
     }
   }
 
-  function handleEdit(item: RawMaterial) {
-    setNuevoItem({ 
-      name: item.name, 
-      quantity: item.quantity.toString(), 
-      unit: item.unit 
-    })
-    setEditingId(item.id)
-  }
-
   const handleDelete = async (id: number) => {
+    if (!confirm('¿Está seguro que desea eliminar este item?')) return;
+    
     try {
       const response = await fetch(`/api/inventory`, {
         method: 'DELETE',
@@ -165,6 +212,90 @@ export default function InventarioPage() {
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
+            
+            <Select value={selectedUnit} onValueChange={setSelectedUnit}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Filtrar por unidad" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas las unidades</SelectItem>
+                <SelectItem value="kg">Kilogramos</SelectItem>
+                <SelectItem value="g">Gramos</SelectItem>
+                <SelectItem value="l">Litros</SelectItem>
+                <SelectItem value="ml">Mililitros</SelectItem>
+                <SelectItem value="unidad">Unidades</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Select value={stockFilter} onValueChange={setStockFilter}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Filtrar por stock" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todo el stock</SelectItem>
+                <SelectItem value="low">Stock bajo</SelectItem>
+                <SelectItem value="medium">Stock medio</SelectItem>
+                <SelectItem value="high">Stock alto</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Dialog open={isBulkUpdateOpen} onOpenChange={setIsBulkUpdateOpen}>
+              <DialogTrigger asChild>
+                <Button>
+                  <PackagePlus className="mr-2 h-4 w-4" />
+                  Actualización Masiva
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-4xl">
+                <DialogHeader>
+                  <DialogTitle>Actualización Masiva de Stock</DialogTitle>
+                </DialogHeader>
+                <div className="max-h-[600px] overflow-y-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Producto</TableHead>
+                        <TableHead>Stock Actual</TableHead>
+                        <TableHead>Unidad</TableHead>
+                        <TableHead>Cantidad a Agregar</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {inventario.map((item) => (
+                        <TableRow key={item.id}>
+                          <TableCell>{item.name}</TableCell>
+                          <TableCell>{item.quantity}</TableCell>
+                          <TableCell>{item.unit}</TableCell>
+                          <TableCell>
+                            <Input
+                              type="number"
+                              value={bulkUpdates[item.id] || ''}
+                              onChange={(e) => setBulkUpdates(prev => ({
+                                ...prev,
+                                [item.id]: e.target.value
+                              }))}
+                              placeholder="0"
+                              className="w-32"
+                            />
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+                <DialogFooter>
+                  <Button onClick={handleBulkUpdate} disabled={isSubmitting}>
+                    {isSubmitting ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <PackagePlus className="mr-2 h-4 w-4" />
+                    )}
+                    Actualizar Stock
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+
             <Button onClick={fetchInventario}>
               {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PackagePlus className="mr-2 h-4 w-4" />}
               Actualizar
@@ -180,7 +311,6 @@ export default function InventarioPage() {
         )}
 
         <div className="grid md:grid-cols-2 gap-6">
-          {/* Panel de Estadísticas */}
           <Card>
             <CardHeader>
               <CardTitle>Resumen de Inventario</CardTitle>
@@ -188,7 +318,10 @@ export default function InventarioPage() {
             <CardContent>
               <div className="h-[200px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={getInventoryTrend()}>
+                  <LineChart data={inventario.map(item => ({
+                    name: item.name,
+                    cantidad: item.quantity
+                  })).slice(0, 5)}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="name" />
                     <YAxis />
@@ -200,13 +333,18 @@ export default function InventarioPage() {
             </CardContent>
           </Card>
 
-          {/* Panel de Alerta de Stock Bajo */}
           <Card className="bg-orange-50">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <AlertTriangle className="h-5 w-5 text-orange-500" />
-                Alertas de Stock Bajo
-              </CardTitle>
+              <div className="flex justify-between items-center">
+                <CardTitle className="flex items-center gap-2">
+                  <AlertTriangle className="h-5 w-5 text-orange-500" />
+                  Alertas de Stock Bajo
+                </CardTitle>
+                <Button variant="outline" size="sm" onClick={handleExportLowStock}>
+                  <FileDown className="mr-2 h-4 w-4" />
+                  Exportar
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               {lowStockItems.length > 0 ? (
@@ -227,7 +365,6 @@ export default function InventarioPage() {
           </Card>
         </div>
 
-        {/* Formulario de nuevo item */}
         <Card>
           <CardHeader>
             <CardTitle>{editingId ? 'Editar Item' : 'Agregar Nuevo Item'}</CardTitle>
@@ -275,9 +412,8 @@ export default function InventarioPage() {
           </CardContent>
         </Card>
 
-        {/* Tabla de inventario */}
         <Card>
-          <CardContent className="p-0">
+          <CardContent>
             <Table>
               <TableHeader>
                 <TableRow>
@@ -285,19 +421,20 @@ export default function InventarioPage() {
                   <TableHead>Cantidad</TableHead>
                   <TableHead>Unidad</TableHead>
                   <TableHead>Estado</TableHead>
+                  <TableHead>Actualización Rápida</TableHead>
                   <TableHead>Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center py-8">
+                    <TableCell colSpan={6} className="text-center py-8">
                       <Loader2 className="h-8 w-8 animate-spin mx-auto" />
                     </TableCell>
                   </TableRow>
                 ) : filteredInventory.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center py-8">
+                    <TableCell colSpan={6} className="text-center py-8">
                       No se encontraron items en el inventario
                     </TableCell>
                   </TableRow>
@@ -319,11 +456,69 @@ export default function InventarioPage() {
                         </span>
                       </TableCell>
                       <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Input
+                            type="number"
+                            step="0.01"
+                            value={bulkUpdates[item.id] || ''}
+                            onChange={(e) => setBulkUpdates(prev => ({
+                              ...prev,
+                              [item.id]: e.target.value
+                            }))}
+                            placeholder="Cantidad"
+                            className="w-24"
+                          />
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={async () => {
+                              if (!bulkUpdates[item.id]) return;
+                              try {
+                                await fetch('/api/inventory', {
+                                  method: 'PUT',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({
+                                    id: item.id,
+                                    name: item.name,
+                                    quantity: item.quantity + parseFloat(bulkUpdates[item.id] || '0'),
+                                    unit: item.unit
+                                  })
+                                });
+                                await fetchInventario();
+                                setBulkUpdates(prev => ({
+                                  ...prev,
+                                  [item.id]: ''
+                                }));
+                              } catch {
+                                setError('Error al actualizar el item');
+                              }
+                            }}
+                          >
+                            <Plus className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                      <TableCell>
                         <div className="flex gap-2">
-                          <Button onClick={() => handleEdit(item)} variant="outline" size="sm">
+                          <Button 
+                            onClick={() => {
+                              setNuevoItem({
+                                name: item.name,
+                                quantity: item.quantity.toString(),
+                                unit: item.unit
+                              });
+                              setEditingId(item.id);
+                            }} 
+                            variant="outline" 
+                            size="sm"
+                          >
                             Editar
                           </Button>
-                          <Button onClick={() => handleDelete(item.id)} variant="destructive" size="sm">
+                          <Button 
+                            onClick={() => handleDelete(item.id)} 
+                            variant="destructive" 
+                            size="sm"
+                          >
                             Eliminar
                           </Button>
                         </div>
