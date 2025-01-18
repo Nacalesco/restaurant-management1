@@ -24,6 +24,7 @@ export default function InventarioPage() {
   const [error, setError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [loading, setLoading] = useState(true)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [lowStockItems, setLowStockItems] = useState<RawMaterial[]>([])
 
   useEffect(() => {
@@ -61,30 +62,69 @@ export default function InventarioPage() {
     })).slice(0, 5) // Mostrar solo los primeros 5 items para el gráfico
   }
 
-  function handleSubmit(event: React.FormEvent<HTMLFormElement>): void {
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (editingId !== null) {
-      // Edit existing item
-      setInventario(prevInventario =>
-        prevInventario.map(item =>
-          item.id === editingId ? { ...item, ...nuevoItem, quantity: parseFloat(nuevoItem.quantity) } : item
-        )
-      )
-      setEditingId(null)
-    } else {
-      // Add new item
-      const newItem = {
-        id: inventario.length + 1, // Simple ID generation, consider using a better method in production
-        ...nuevoItem,
-        quantity: parseFloat(nuevoItem.quantity)
+    setIsSubmitting(true)
+    try {
+      if (editingId !== null) {
+        // Edit existing item
+        const response = await fetch('/api/inventory', {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            id: editingId,
+            name: nuevoItem.name,
+            quantity: parseFloat(nuevoItem.quantity),
+            unit: nuevoItem.unit
+          }),
+        })
+        
+        if (!response.ok) {
+          throw new Error('Error updating item')
+        }
+      } else {
+        // Add new item
+        const response = await fetch('/api/inventory', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            name: nuevoItem.name,
+            quantity: parseFloat(nuevoItem.quantity),
+            unit: nuevoItem.unit
+          }),
+        })
+        
+        if (!response.ok) {
+          throw new Error('Error adding item')
+        }
       }
-      setInventario([...inventario, newItem])
+      
+      // Refresh the inventory after successful operation
+      await fetchInventario()
+      setEditingId(null)
+      setNuevoItem({ name: '', quantity: '', unit: '' })
+      setError(null)
+    } catch (err) {
+      if (err instanceof Error) {
+        setError(err.message)
+      } else {
+        setError('An unknown error occurred')
+      }
+    } finally {
+      setIsSubmitting(false)
     }
-    setNuevoItem({ name: '', quantity: '', unit: '' })
   }
 
-  function handleEdit(item: RawMaterial): void {
-    setNuevoItem({ name: item.name, quantity: item.quantity.toString(), unit: item.unit })
+  function handleEdit(item: RawMaterial) {
+    setNuevoItem({ 
+      name: item.name, 
+      quantity: item.quantity.toString(), 
+      unit: item.unit 
+    })
     setEditingId(item.id)
   }
 
@@ -100,7 +140,7 @@ export default function InventarioPage() {
       if (!response.ok) {
         throw new Error('Error deleting raw material');
       }
-      setInventario(prevInventario => prevInventario.filter(item => item.id !== id));
+      await fetchInventario();
     } catch (err) {
       if (err instanceof Error) {
         setError(err.message);
@@ -110,7 +150,6 @@ export default function InventarioPage() {
     }
   };
 
-  // JSX principal
   return (
     <Layout>
       <div className="container mx-auto p-4 space-y-6">
@@ -224,8 +263,12 @@ export default function InventarioPage() {
                   <SelectItem value="unidad">Unidades</SelectItem>
                 </SelectContent>
               </Select>
-              <Button type="submit">
-                <Package className="mr-2 h-4 w-4" />
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Package className="mr-2 h-4 w-4" />
+                )}
                 {editingId ? 'Actualizar' : 'Agregar'}
               </Button>
             </form>
