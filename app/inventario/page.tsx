@@ -8,7 +8,7 @@ import { Alert, AlertDescription } from "@/app/components/ui/alert"
 import { Card, CardContent, CardHeader, CardTitle } from "@/app/components/ui/card"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/app/components/ui/dialog"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
-import { Search, AlertTriangle, Package, PackagePlus, Loader2, Plus,FileDown } from 'lucide-react'
+import { Search, AlertTriangle, Package, PackagePlus, Loader2, Plus, FileDown } from 'lucide-react'
 import Layout from '../components/layout'
 
 interface RawMaterial {
@@ -17,7 +17,6 @@ interface RawMaterial {
   quantity: number;
   unit: string;
 }
-
 
 export default function InventarioPage() {
   const [inventario, setInventario] = useState<RawMaterial[]>([])
@@ -33,6 +32,10 @@ export default function InventarioPage() {
   const [selectedUnit, setSelectedUnit] = useState<string>('all')
   const [stockFilter, setStockFilter] = useState<string>('all')
 
+  const formatNumber = (num: number) => {
+    return Number(num.toFixed(2));
+  };
+
   useEffect(() => {
     fetchInventario()
   }, [])
@@ -45,8 +48,12 @@ export default function InventarioPage() {
         throw new Error('Error fetching inventory')
       }
       const data = await response.json()
-      setInventario(data)
-      setLowStockItems(data.filter((item: RawMaterial) => item.quantity < 10))
+      const formattedData = data.map((item: RawMaterial) => ({
+        ...item,
+        quantity: formatNumber(item.quantity)
+      }))
+      setInventario(formattedData)
+      setLowStockItems(formattedData.filter((item: RawMaterial) => item.quantity < 10))
       setError(null)
     } catch (error) {
       console.error('Error fetching inventory:', error)
@@ -56,48 +63,59 @@ export default function InventarioPage() {
     }
   }
 
-  const handleBulkUpdate = async () => {
-    setIsSubmitting(true)
-    try {
-      const updates = Object.entries(bulkUpdates)
-        .filter(([, quantity]) => quantity !== '')
-        .map(([id, quantity]) => ({
-          id: parseInt(id),
-          quantity: parseFloat(quantity)
-        }))
+  // Modifica la función handleBulkUpdate
+const handleBulkUpdate = async () => {
+  setIsSubmitting(true)
+  try {
+    const updates = Object.entries(bulkUpdates)
+      .filter(([, quantity]) => quantity !== '')
+      .map(([id, quantity]) => ({
+        id: parseInt(id),
+        quantity: formatNumber(parseFloat(quantity))
+      }))
 
-      const updatePromises = updates.map(({ id, quantity }) => {
-        const item = inventario.find(i => i.id === id)
-        if (!item) return null
+    const updatePromises = updates.map(({ id, quantity }) => {
+      const item = inventario.find(i => i.id === id)
+      if (!item) return null
 
-        return fetch('/api/inventory', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            id,
-            name: item.name,
-            quantity: item.quantity + quantity,
-            unit: item.unit
-          })
+      const newQuantity = item.quantity + quantity
+      // Verificar si el resultado sería negativo
+      if (newQuantity < 0) {
+        throw new Error(`La cantidad final no puede ser negativa para ${item.name}`)
+      }
+
+      return fetch('/api/inventory', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id,
+          name: item.name,
+          quantity: formatNumber(newQuantity),
+          unit: item.unit
         })
       })
+    })
 
-      await Promise.all(updatePromises.filter(Boolean))
-      await fetchInventario()
-      setBulkUpdates({})
-      setIsBulkUpdateOpen(false)
-      setError(null)
-    } catch {
+    await Promise.all(updatePromises.filter(Boolean))
+    await fetchInventario()
+    setBulkUpdates({})
+    setIsBulkUpdateOpen(false)
+    setError(null)
+  } catch (error) {
+    if (error instanceof Error) {
+      setError(error.message)
+    } else {
       setError('Error al actualizar el inventario')
-    } finally {
-      setIsSubmitting(false)
     }
+  } finally {
+    setIsSubmitting(false)
   }
+}
 
   const handleExportLowStock = () => {
     const csvContent = "data:text/csv;charset=utf-8," + 
       "Nombre,Cantidad,Unidad\n" +
-      lowStockItems.map(item => `${item.name},${item.quantity},${item.unit}`).join("\n")
+      lowStockItems.map(item => `${item.name},${formatNumber(item.quantity)},${item.unit}`).join("\n")
     
     const encodedUri = encodeURI(csvContent)
     const link = document.createElement("a")
@@ -123,6 +141,8 @@ export default function InventarioPage() {
     event.preventDefault()
     setIsSubmitting(true)
     try {
+      const quantity = formatNumber(parseFloat(nuevoItem.quantity))
+
       if (editingId !== null) {
         const response = await fetch('/api/inventory', {
           method: 'PUT',
@@ -132,7 +152,7 @@ export default function InventarioPage() {
           body: JSON.stringify({
             id: editingId,
             name: nuevoItem.name,
-            quantity: parseFloat(nuevoItem.quantity),
+            quantity,
             unit: nuevoItem.unit
           }),
         })
@@ -148,7 +168,7 @@ export default function InventarioPage() {
           },
           body: JSON.stringify({
             name: nuevoItem.name,
-            quantity: parseFloat(nuevoItem.quantity),
+            quantity,
             unit: nuevoItem.unit
           }),
         })
@@ -264,11 +284,13 @@ export default function InventarioPage() {
                       {inventario.map((item) => (
                         <TableRow key={item.id}>
                           <TableCell>{item.name}</TableCell>
-                          <TableCell>{item.quantity}</TableCell>
+                          <TableCell>{formatNumber(item.quantity)}</TableCell>
                           <TableCell>{item.unit}</TableCell>
                           <TableCell>
                             <Input
                               type="number"
+                              min="0"
+                              step="0.01"
                               value={bulkUpdates[item.id] || ''}
                               onChange={(e) => setBulkUpdates(prev => ({
                                 ...prev,
@@ -320,7 +342,7 @@ export default function InventarioPage() {
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={inventario.map(item => ({
                     name: item.name,
-                    cantidad: item.quantity
+                    cantidad: formatNumber(item.quantity)
                   })).slice(0, 5)}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="name" />
@@ -353,7 +375,7 @@ export default function InventarioPage() {
                     <div key={item.id} className="flex justify-between items-center p-2 bg-white rounded-lg shadow-sm">
                       <span className="font-medium">{item.name}</span>
                       <span className="text-orange-600">
-                        {item.quantity} {item.unit}
+                        {formatNumber(item.quantity)} {item.unit}
                       </span>
                     </div>
                   ))}
@@ -381,6 +403,7 @@ export default function InventarioPage() {
                 placeholder="Cantidad"
                 type="number"
                 step="0.01"
+                min="0"
                 value={nuevoItem.quantity}
                 onChange={(e) => setNuevoItem({ ...nuevoItem, quantity: e.target.value })}
                 required
@@ -442,7 +465,7 @@ export default function InventarioPage() {
                   filteredInventory.map((item) => (
                     <TableRow key={item.id}>
                       <TableCell>{item.name}</TableCell>
-                      <TableCell>{item.quantity}</TableCell>
+                      <TableCell>{formatNumber(item.quantity)}</TableCell>
                       <TableCell>{item.unit}</TableCell>
                       <TableCell>
                         <span className={`px-2 py-1 rounded-full text-sm ${
@@ -460,6 +483,7 @@ export default function InventarioPage() {
                           <Input
                             type="number"
                             step="0.01"
+                            min="0"
                             value={bulkUpdates[item.id] || ''}
                             onChange={(e) => setBulkUpdates(prev => ({
                               ...prev,
@@ -469,33 +493,70 @@ export default function InventarioPage() {
                             className="w-24"
                           />
                           <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={async () => {
-                              if (!bulkUpdates[item.id]) return;
-                              try {
-                                await fetch('/api/inventory', {
-                                  method: 'PUT',
-                                  headers: { 'Content-Type': 'application/json' },
-                                  body: JSON.stringify({
-                                    id: item.id,
-                                    name: item.name,
-                                    quantity: item.quantity + parseFloat(bulkUpdates[item.id] || '0'),
-                                    unit: item.unit
-                                  })
-                                });
-                                await fetchInventario();
-                                setBulkUpdates(prev => ({
-                                  ...prev,
-                                  [item.id]: ''
-                                }));
-                              } catch {
-                                setError('Error al actualizar el item');
-                              }
-                            }}
-                          >
-                            <Plus className="h-4 w-4" />
-                          </Button>
+  size="sm"
+  variant="outline"
+  onClick={async () => {
+    if (!bulkUpdates[item.id]) return;
+    try {
+      const newQuantity = item.quantity + parseFloat(bulkUpdates[item.id] || '0')
+      // Verificar si el resultado sería negativo
+      if (newQuantity < 0) {
+        throw new Error(`La cantidad final no puede ser negativa para ${item.name}`)
+      }
+
+      await fetch('/api/inventory', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: item.id,
+          name: item.name,
+          quantity: formatNumber(newQuantity),
+          unit: item.unit
+        })
+      });
+      await fetchInventario();
+      setBulkUpdates(prev => ({
+        ...prev,
+        [item.id]: ''
+      }));
+      setError(null);
+    } catch (error) {
+      if (error instanceof Error) {
+        setError(error.message);
+      } else {
+        setError('Error al actualizar el item');
+      }
+    }
+  }}
+>
+  <Plus className="h-4 w-4" />
+</Button>
+<Input
+  type="number"
+  step="0.01"
+  min="0"
+  value={bulkUpdates[item.id] || ''}
+  onChange={(e) => {
+    const value = parseFloat(e.target.value);
+    const newQuantity = item.quantity + value;
+    
+    // Solo actualiza si el resultado no sería negativo
+    if (!isNaN(value) && newQuantity >= 0) {
+      setBulkUpdates(prev => ({
+        ...prev,
+        [item.id]: e.target.value
+      }))
+    }
+  }}
+  onKeyDown={(e) => {
+    // Prevenir el ingreso del signo negativo
+    if (e.key === '-') {
+      e.preventDefault();
+    }
+  }}
+  placeholder="Cantidad"
+  className="w-24"
+/>
                         </div>
                       </TableCell>
                       <TableCell>
@@ -504,7 +565,7 @@ export default function InventarioPage() {
                             onClick={() => {
                               setNuevoItem({
                                 name: item.name,
-                                quantity: item.quantity.toString(),
+                                quantity: formatNumber(item.quantity).toString(),
                                 unit: item.unit
                               });
                               setEditingId(item.id);
